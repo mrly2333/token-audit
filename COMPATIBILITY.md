@@ -1,45 +1,45 @@
-# Compatibility and Validation
+# 兼容性与验证范围
 
-This project is currently published with a conservative compatibility statement.
+当前对外发布时，这个项目采用比较保守的兼容性说明。
 
-## Upstream officially tested so far
+## 目前正式验证过的上游
 
-- **NewAPI** as the upstream OpenAI-compatible gateway
+- **NewAPI** 作为 OpenAI 兼容上游网关
 
-## Request types covered by current implementation
+## 当前实现覆盖的请求类型
 
 - `/v1/chat/completions`
 - `/v1/responses`
 - `/v1/completions`
 - `/v1/embeddings`
-- JSON responses
-- SSE streaming responses
+- 普通 JSON 响应
+- SSE 流式响应
 
-## What is captured
+## 当前会采集的内容
 
-- request timing and status
-- model name when detectable
-- token usage when provided by the upstream payload
-- user text and assistant text when the payload format matches supported OpenAI-style schemas
-- redacted request and response bodies up to the configured `max_body_bytes`
+- 请求耗时和状态码
+- 能够识别时的模型名称
+- 上游返回中自带的 Token 用量信息
+- 符合当前 OpenAI 风格结构时提取出的用户文本和助手文本
+- 在 `max_body_bytes` 限制范围内保存的脱敏请求体与响应体
 
-## Not yet formally validated
+## 尚未做正式验证的部分
 
-- gateways other than NewAPI
-- custom or vendor-specific payload formats
-- multimodal payloads beyond the currently parsed text and image patterns
-- audio or realtime interfaces
-- WebSocket-based transports
-- large-scale multi-node deployments
+- NewAPI 以外的其他网关
+- 自定义或厂商私有的载荷格式
+- 目前解析逻辑之外的多模态数据格式
+- 音频接口和实时接口
+- 基于 WebSocket 的传输方式
+- 大规模多节点部署场景
 
-## Practical expectation
+## 实际使用预期
 
-If your upstream behaves like standard OpenAI or NewAPI JSON and SSE APIs, the proxy will likely work with little or no change. Even so, you should treat non-NewAPI deployments as unverified until you run your own staging tests.
+如果你的上游行为与标准 OpenAI 或 NewAPI 的 JSON / SSE 接口足够接近，这个代理大概率可以较小改动甚至直接工作。但只要不是 NewAPI，现阶段都建议先按“未正式验证”处理，再自行完成预发布测试。
 
-## Recommended rollout approach
+## 推荐上线方式
 
-1. Start in a staging environment.
-2. Send known requests through the proxy.
-3. Confirm forwarding behavior, status codes, streaming output, and token accounting.
-4. Review stored logs to verify redaction and payload parsing meet your expectations.
-5. Only then place the proxy in front of production traffic.
+1. 先在预发布或测试环境部署。
+2. 通过代理发送几组已知请求。
+3. 检查转发结果、状态码、流式输出和 Token 统计是否符合预期。
+4. 回到审计后台确认脱敏与解析结果是否满足你的要求。
+5. 确认无误后再接入正式流量。

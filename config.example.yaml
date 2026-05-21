@@ -1,5 +1,5 @@
-# Generate admin_password_hash with:
-#   go run ./scripts/hash_password.go <your-password>
+# 使用下面的命令生成 admin_password_hash：
+#   go run ./scripts/hash_password.go <你的密码>
 listen_addr: 127.0.0.1:3007
 upstream_base: http://127.0.0.1:3005
 web_base_path: /audit

@@ -1,104 +1,104 @@
-# Deployment Guide
+# 部署指南
 
-This document describes the supported deployment patterns for `token-audit` and the assumptions behind each one.
+本文说明 `token-audit` 当前支持的部署方式，以及每种方式背后的运行假设。
 
-## Architecture
+## 架构说明
 
-The proxy listens on a single port and serves two things at once:
+程序只监听一个端口，同时提供两类能力：
 
-- Audit web UI under `web_base_path` such as `/audit`
-- Transparent proxy traffic for all other paths
+- 挂载在 `web_base_path` 下的审计后台，例如 `/audit`
+- 其他路径上的透明代理转发能力
 
-Typical flow:
+典型调用链路如下：
 
-1. Your clients send OpenAI-compatible traffic to `token-audit`.
-2. `token-audit` forwards the request to the configured `upstream_base`.
-3. Matching capture paths are recorded in PostgreSQL.
-4. Operators review logs in the built-in web console.
+1. 你的客户端把 OpenAI 兼容请求发送到 `token-audit`。
+2. `token-audit` 将请求转发到配置好的 `upstream_base`。
+3. 命中采集路径的请求会被写入 PostgreSQL。
+4. 运维或审计人员通过内置后台查看日志和统计信息。
 
-## Requirements
+## 环境要求
 
-- PostgreSQL 16 or newer
-- One existing upstream OpenAI-compatible gateway
-- A deployment host that can reach both PostgreSQL and the upstream gateway
-- Go 1.23+ if you want to build locally from source
-- Docker and Docker Compose if you prefer container deployment
+- PostgreSQL 16 或更高版本
+- 一个已经运行的 OpenAI 兼容上游网关
+- 一台能够同时访问 PostgreSQL 和上游网关的部署主机
+- 如果要本地编译源码，需要 Go 1.23 及以上版本
+- 如果使用容器部署，需要 Docker 和 Docker Compose
 
-## Configuration fields
+## 配置项说明
 
-`config.example.yaml` and `config.docker.yaml` document the supported fields:
+`config.example.yaml` 和 `config.docker.yaml` 中包含当前支持的配置项：
 
-- `listen_addr`: bind address for the proxy and audit web UI
-- `upstream_base`: base URL of the upstream gateway to forward traffic to
-- `web_base_path`: path prefix for the audit UI, usually `/audit`
-- `postgres_dsn`: PostgreSQL DSN used for migrations and runtime storage
-- `hmac_secret`: secret used to fingerprint bearer tokens without storing them directly
-- `admin_username`: username for the built-in admin login
-- `admin_password_hash`: bcrypt hash for the built-in admin login
-- `max_body_bytes`: max bytes to retain per request or response payload
-- `capture_paths`: upstream paths that should be fully audited
+- `listen_addr`：代理和审计后台监听的地址
+- `upstream_base`：要转发到的上游网关基础地址
+- `web_base_path`：审计后台路径前缀，通常使用 `/audit`
+- `postgres_dsn`：用于迁移和运行时存储的 PostgreSQL DSN
+- `hmac_secret`：用于对 Bearer Token 生成指纹的密钥，不直接保存原始令牌
+- `admin_username`：内置后台管理员用户名
+- `admin_password_hash`：内置后台管理员密码对应的 bcrypt 哈希
+- `max_body_bytes`：单次请求或响应最多保留多少字节的内容
+- `capture_paths`：需要完整审计的上游路径列表
 
-## Generating the admin password hash
+## 生成管理员密码哈希
 
-If Go is available locally:
+如果本机有 Go：
 
 ```bash
-go run ./scripts/hash_password.go "<strong-password>"
+go run ./scripts/hash_password.go "<你的强密码>"
 ```
 
-If you prefer Docker:
+如果你想用 Docker 临时生成：
 
 ```bash
 docker run --rm -v "$PWD:/src" -w /src golang:1.23 \
-  go run ./scripts/hash_password.go "<strong-password>"
+  go run ./scripts/hash_password.go "<你的强密码>"
 ```
 
-Paste the generated bcrypt hash into `admin_password_hash`.
+把生成出的 bcrypt 哈希填入 `admin_password_hash`。
 
-## Option 1: Docker Compose
+## 方式一：Docker Compose
 
-This is the easiest deployment model for a single host.
+这是单机部署时最省事的方案。
 
-1. Edit `config.docker.yaml`.
-2. Set a real `hmac_secret`.
-3. Generate and paste a valid `admin_password_hash`.
-4. Point `upstream_base` at your running upstream gateway.
-5. Start the stack:
+1. 编辑 `config.docker.yaml`。
+2. 设置真实的 `hmac_secret`。
+3. 生成并填入有效的 `admin_password_hash`。
+4. 把 `upstream_base` 指向你已经运行的上游网关。
+5. 启动服务：
 
 ```bash
 docker compose up -d --build
 ```
 
-What this stack provides:
+该编排默认会启动：
 
-- `postgres`: local PostgreSQL container
-- `audit-proxy`: the compiled proxy container
+- `postgres`：本地 PostgreSQL 容器
+- `audit-proxy`：编译后的审计代理容器
 
-Default access points:
+默认访问地址：
 
-- Proxy and audit service: `http://127.0.0.1:3007`
-- Audit UI: `http://127.0.0.1:3007/audit`
-- PostgreSQL: `127.0.0.1:5432`
+- 代理和审计服务：`http://127.0.0.1:3007`
+- 审计后台：`http://127.0.0.1:3007/audit`
+- PostgreSQL：`127.0.0.1:5432`
 
-## Option 2: Binary + systemd
+## 方式二：二进制 + systemd
 
-This option is suitable for a Linux server where you want a native service instead of Docker.
+如果你准备把它部署到 Linux 服务器，并且更偏向原生服务方式，可以使用这一套。
 
-1. Install Go 1.23+.
-2. Build the binary:
+1. 安装 Go 1.23 或更高版本。
+2. 编译程序：
 
 ```bash
 go build -o bin/newapi-audit-proxy ./cmd/newapi-audit-proxy
 ```
 
-3. Copy `config.example.yaml` to `config.yaml` and fill in real values.
-4. Install and start the service:
+3. 将 `config.example.yaml` 复制为 `config.yaml`，并填入真实配置。
+4. 安装并启动服务：
 
 ```bash
 bash audit.sh install
 ```
 
-Useful service commands:
+常用服务命令：
 
 ```bash
 bash audit.sh status
@@ -106,39 +106,39 @@ bash audit.sh restart
 bash audit.sh log
 ```
 
-`audit.sh` installs a `systemd` unit that runs the binary from the current project directory.
+`audit.sh` 会在当前项目目录基础上安装一个 `systemd` 服务单元并启动它。
 
-## Reverse proxy and exposure guidance
+## 反向代理与对外暴露建议
 
-If you expose the audit UI to a wider audience, place a reverse proxy in front of it and restrict access. Recommended controls:
+如果你要把审计后台暴露给更多人访问，建议前面再加一层反向代理，并限制访问来源。推荐至少做到：
 
-- allow-list trusted source IPs
-- protect `/audit` with SSO, VPN, or reverse proxy authentication
-- terminate TLS at the reverse proxy
-- keep PostgreSQL private and non-public
+- 只允许可信 IP 访问
+- 为 `/audit` 增加 SSO、VPN 或反向代理鉴权
+- 在反向代理层终止 TLS
+- 不要把 PostgreSQL 直接暴露到公网
 
-## Operational notes
+## 运维注意事项
 
-- Database migrations run automatically on startup.
-- The application stores redacted prompt and response content for captured routes.
-- Token fingerprints are deterministic per `hmac_secret`; rotating the secret changes future fingerprints.
-- Streaming responses are captured in a best-effort manner by reconstructing SSE output into stored text and usage summaries.
+- 程序启动时会自动执行数据库迁移。
+- 对命中采集路径的请求，会保存脱敏后的提示词和响应内容。
+- Token 指纹由 `hmac_secret` 决定，同一个密钥下结果稳定；如果你轮换密钥，后续新请求的指纹会发生变化。
+- 对流式响应的采集属于尽力而为模式，会根据 SSE 数据重建可展示文本和用量摘要。
 
-## Troubleshooting
+## 故障排查
 
-If the service starts but login fails:
+如果服务能启动，但后台无法登录：
 
-- verify that `admin_password_hash` is a real bcrypt hash
-- verify that the browser is opening the same `web_base_path` configured in YAML
+- 检查 `admin_password_hash` 是否是真实有效的 bcrypt 哈希
+- 检查浏览器访问路径是否与 YAML 中配置的 `web_base_path` 一致
 
-If requests pass through but no logs appear:
+如果请求能转发，但后台没有日志：
 
-- verify that the request path is included in `capture_paths`
-- verify that PostgreSQL is reachable from the application process
-- check service logs for migration or insert errors
+- 检查请求路径是否包含在 `capture_paths` 中
+- 检查应用进程是否能访问 PostgreSQL
+- 查看服务日志中是否有迁移失败或插入失败的报错
 
-If clients receive upstream errors:
+如果客户端收到上游错误：
 
-- verify `upstream_base`
-- verify that the upstream gateway accepts the same paths you are forwarding
-- confirm that the upstream gateway is reachable from the deployment host
+- 检查 `upstream_base` 是否填写正确
+- 检查上游网关是否真的支持你正在转发的路径
+- 检查部署主机是否能够访问上游网关
