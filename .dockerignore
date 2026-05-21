@@ -1,0 +1,12 @@
+.git
+.github
+.gitignore
+.cache
+.gocache*
+.gomodcache
+.tools
+bin
+config.yaml
+*.log
+*.exe
+tmp

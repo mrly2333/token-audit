@@ -1,0 +1,26 @@
+# Local configuration
+config.yaml
+
+# Build output
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+
+# Go cache
+.cache/
+.gocache*/
+.gomodcache/
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local staging or scratch content
+tmp/
+logs/
