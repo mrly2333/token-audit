@@ -1,54 +1,145 @@
+<div align="center">
+
 # token-audit
+
+**Transparent AI API Audit Proxy with Built-in Dashboard**
+
+[![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker)](docker-compose.yml)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-336791?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey?style=flat-square)]()
+
+A lightweight, transparent proxy that sits in front of your OpenAI-compatible API gateway, silently logging every request and response to PostgreSQL — with a clean web dashboard for searching, filtering, and analyzing your AI traffic.
+
+[English](#features) | [中文](#中文说明)
+
+</div>
+
+---
+
+## Features
+
+- **Multi-Protocol Support** — OpenAI (`/v1/chat/completions`, `/v1/responses`, `/v1/completions`, `/v1/embeddings`) and Claude (`/v1/messages`)
+- **Full Request Capture** — Headers, body, user prompts, assistant responses, model name, token usage, latency
+- **Streaming Aware** — Handles both JSON and SSE streaming responses, reconstructing text from delta chunks
+- **Token Privacy** — HMAC-based fingerprinting replaces raw API keys; real tokens are never stored
+- **Built-in Dashboard** — Search logs, filter by token/model/status, view per-token and per-model statistics
+- **Auto Migration** — Database schema updates automatically on startup
+- **One-Command Deploy** — Docker Compose ready, or use the included `systemd` helper script
+
+## Architecture
+
+```
+                          ┌─────────────────────┐
+  Client ──────────────►  │     token-audit      │
+  (OpenAI / Claude API)   │   (this project)     │
+                          └──────────┬───────────┘
+                                     │
+                          ┌──────────▼───────────┐
+                          │   Upstream Gateway    │
+                          │  (NewAPI / OpenAI /   │
+                          │   Claude / etc.)      │
+                          └──────────────────────┘
+                                     │
+                          ┌──────────▼───────────┐
+                          │     PostgreSQL        │
+                          │   (audit storage)     │
+                          └──────────────────────┘
+```
+
+## Quick Start
+
+### Docker Compose (recommended)
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/mrly2333/token-audit.git
+cd token-audit
+
+# 2. Edit config
+cp config.example.yaml config.yaml
+# Set: upstream_base, hmac_secret, admin_password_hash
+
+# 3. Generate admin password hash
+docker run --rm -v "$PWD:/src" -w /src golang:1.23 \
+  go run ./scripts/hash_password.go "your-strong-password"
+
+# 4. Start
+docker compose up -d --build
+
+# 5. Open dashboard
+# http://127.0.0.1:3007/audit
+```
+
+### Binary + systemd
+
+```bash
+go build -o bin/newapi-audit-proxy ./cmd/newapi-audit-proxy
+cp config.example.yaml config.yaml  # edit config
+bash audit.sh install
+```
+
+## Screenshots
+
+> _Add screenshots of the dashboard here to increase visibility._
+
+| Dashboard Overview | Request Logs | Token Statistics |
+|---|---|---|
+| ![overview](docs/screenshots/overview.png) | ![logs](docs/screenshots/logs.png) | ![tokens](docs/screenshots/tokens.png) |
+
+## Use Cases
+
+- **Cost Attribution** — Which token/model consumes the most?
+- **Debugging** — What prompt caused a 500 error? What did the model actually return?
+- **Compliance** — Keep an audit trail of all AI API interactions
+- **Monitoring** — Track error rates, latency, and token usage trends
+
+## Documentation
+
+- [Deployment Guide](DEPLOYMENT.md) — Full setup instructions
+- [Compatibility](COMPATIBILITY.md) — Tested upstream gateways and supported APIs
+- [Contributing](CONTRIBUTING.md) — How to contribute
+
+---
+
+## 中文说明
 
 `token-audit` 是一个透明的 OpenAI 兼容审计代理，内置可视化审计后台。它部署在现有上游 API 前面，原样转发请求，并将脱敏后的请求、响应和用量信息写入 PostgreSQL，方便后续排查、统计和审计。
 
-当前版本主要针对 **NewAPI** 作为上游服务进行过验证。理论上也可能兼容其他 OpenAI 兼容网关，但这些集成目前还没有做正式测试。
+### 支持的协议
 
-## 项目功能
+| 协议 | 端点 | 认证方式 |
+|------|------|----------|
+| OpenAI | `/v1/chat/completions`, `/v1/responses`, `/v1/completions`, `/v1/embeddings` | `Authorization: Bearer` |
+| Claude | `/v1/messages` | `x-api-key` |
 
-- 代理指定的 OpenAI 风格接口，例如 `/v1/chat/completions`、`/v1/responses`、`/v1/completions`、`/v1/embeddings`
-- 记录请求耗时、状态码、Token 用量、模型名称、用户文本、助手文本以及部分原始载荷
-- 使用基于 HMAC 的指纹替代真实 API Key，避免把原始令牌直接存进数据库
-- 提供审计后台，可查看概览统计、请求检索、令牌别名和数据库维护操作
-- 同时支持普通 JSON 响应和流式 SSE 响应
-
-## 适用场景
-
-如果你需要在 OpenAI 兼容网关前加一层轻量审计能力，这个项目适合用来回答下面这些问题：
+### 适用场景
 
 - 哪个令牌消耗的用量最多？
 - 哪些模型的调用流量最高？
 - 哪些请求失败、超时或返回了异常内容？
 - 某一次请求对应的提示词和响应文本是什么？
 
-## 重要说明
+### 重要说明
 
-- 这个代理会为审计目的存储经过脱敏处理的请求和响应内容。只有在你的隐私策略和数据留存策略允许记录提示词与回复内容时，才建议部署。
-- 审计后台应放在可信网络边界之后，最好配合 VPN、反向代理鉴权或单点登录使用。
-- 存储的请求头和响应头中会排除原始 `Authorization`、`Cookie` 和 `Set-Cookie`。
-- 当前兼容性与测试边界请查看 [COMPATIBILITY.md](./COMPATIBILITY.md)。
+- 审计后台应放在可信网络边界之后，配合 VPN 或反向代理鉴权使用
+- 存储的请求头中会排除 `Authorization`、`Cookie` 和 `Set-Cookie`
+- Token 指纹由 `hmac_secret` 决定，轮换密钥后指纹会变化
 
-## 快速开始
+---
 
-最快的启动方式是使用 Docker Compose：
+## Tech Stack
 
-1. 编辑 `config.docker.yaml`，把其中占位用的 `hmac_secret` 和 `admin_password_hash` 替换成真实值。
-2. 把 `upstream_base` 指向你现有的 NewAPI 或其他 OpenAI 兼容网关。
-3. 执行 `docker compose up -d --build`。
-4. 打开 `http://127.0.0.1:3007/audit`。
+- **Language:** Go 1.23
+- **Database:** PostgreSQL 16+
+- **Dependencies:** pgx/v5 (PostgreSQL driver), golang.org/x/crypto (bcrypt), gopkg.in/yaml.v3
+- **Container:** Docker + Docker Compose
 
-完整部署方式请查看 [DEPLOYMENT.md](./DEPLOYMENT.md)。
+## Star History
 
-## 仓库结构
+[![Star History Chart](https://api.star-history.com/svg?repos=mrly2333/token-audit&type=Date)](https://star-history.com/#mrly2333/token-audit&Date)
 
-- `cmd/newapi-audit-proxy`：程序入口
-- `internal/proxy`：透明代理与响应流转逻辑
-- `internal/audit`：请求解析、内容脱敏、数据存储与统计能力
-- `internal/web`：审计后台和相关 API
-- `migrations`：PostgreSQL 表结构与迁移脚本
-- `scripts/hash_password.go`：生成后台管理员 bcrypt 密码哈希的辅助脚本
-- `audit.sh`：Linux `systemd` 部署辅助脚本
+## License
 
-## 发布说明
-
-这个仓库当前是整理后的对外发布版本，保留了源码、部署文件和使用文档，移除了本地缓存、编译产物以及机器相关配置。
+[MIT](LICENSE)
