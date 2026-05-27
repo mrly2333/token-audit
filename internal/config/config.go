@@ -14,6 +14,7 @@ var defaultCapturePaths = []string{
 	"/v1/responses",
 	"/v1/completions",
 	"/v1/embeddings",
+	"/v1/messages",
 }
 
 type Config struct {

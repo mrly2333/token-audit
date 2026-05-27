@@ -65,6 +65,18 @@ func New(cfg config.Config, store *audit.Store, logger *log.Logger) (*Handler, e
 	}, nil
 }
 
+func (h *Handler) isCapturePath(path string) bool {
+	_, ok := h.captureSet[path]
+	return ok
+}
+
+func (h *Handler) detectProtocol(r *http.Request) string {
+	if r.URL.Path == "/v1/messages" {
+		return "claude"
+	}
+	return "openai"
+}
+
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	startedAt := time.Now()
 	record := audit.Record{
@@ -79,8 +91,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		RequestContentType: r.Header.Get("Content-Type"),
 	}
 
-	record.TokenFingerprint, record.TokenPreview = audit.TokenMetadata(r.Header.Get("Authorization"), h.cfg.HMACSecret)
-	_, record.IsCapturePath = h.captureSet[r.URL.Path]
+	record.IsCapturePath = h.isCapturePath(r.URL.Path)
+	record.Protocol = h.detectProtocol(r)
+
+	// Extract token fingerprint based on protocol
+	if record.Protocol == "claude" {
+		record.TokenFingerprint, record.TokenPreview = audit.TokenMetadata(r.Header.Get("x-api-key"), h.cfg.HMACSecret)
+	} else {
+		record.TokenFingerprint, record.TokenPreview = audit.TokenMetadata(r.Header.Get("Authorization"), h.cfg.HMACSecret)
+	}
 
 	defer func() {
 		if !record.IsCapturePath {

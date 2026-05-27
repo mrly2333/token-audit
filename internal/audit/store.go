@@ -81,6 +81,7 @@ func (s *Store) Insert(ctx context.Context, record Record) error {
 			remote_addr,
 			request_host,
 			upstream_base,
+			protocol,
 			status_code,
 			error_text,
 			is_capture_path,
@@ -109,10 +110,10 @@ func (s *Store) Insert(ctx context.Context, record Record) error {
 			response_truncated
 		)
 		VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-			$11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb, $20,
-			$21, $22, $23, $24::jsonb, $25::jsonb, $26, $27, $28::jsonb, $29, $30,
-			$31, $32, $33, $34, $35
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+			$12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20::jsonb, $21,
+			$22, $23, $24, $25::jsonb, $26::jsonb, $27, $28, $29::jsonb, $30, $31,
+			$32, $33, $34, $35, $36
 		)
 	`,
 		record.StartedAt,
@@ -124,6 +125,7 @@ func (s *Store) Insert(ctx context.Context, record Record) error {
 		record.RemoteAddr,
 		record.RequestHost,
 		record.UpstreamBase,
+		nullString(record.Protocol),
 		nullInt(record.StatusCode),
 		nullString(record.ErrorText),
 		record.IsCapturePath,
@@ -321,6 +323,7 @@ func (s *Store) ListLogs(ctx context.Context, filters ListFilters) (ListResult, 
 			l.method,
 			l.path,
 			COALESCE(l.status_code, 0) AS status_code,
+			COALESCE(l.protocol, '') AS protocol,
 			COALESCE(l.model, '') AS model,
 			COALESCE(l.token_fingerprint, '') AS token_fingerprint,
 			COALESCE(l.token_preview, '') AS token_preview,
@@ -356,6 +359,7 @@ func (s *Store) ListLogs(ctx context.Context, filters ListFilters) (ListResult, 
 			&item.Method,
 			&item.Path,
 			&item.StatusCode,
+			&item.Protocol,
 			&item.Model,
 			&item.TokenFingerprint,
 			&item.TokenPreview,
@@ -419,6 +423,7 @@ func (s *Store) GetLogCore(ctx context.Context, id int64) (LogCore, error) {
 	var assistantTextChars int64
 	var statusCode sql.NullInt64
 	var stream sql.NullBool
+	var protocol sql.NullString
 
 	err := s.pool.QueryRow(ctx, `
 		SELECT
@@ -436,6 +441,7 @@ func (s *Store) GetLogCore(ctx context.Context, id int64) (LogCore, error) {
 			ta.token_alias,
 			l.model,
 			l.stream,
+			COALESCE(l.protocol, '') AS protocol,
 			COALESCE(substring(COALESCE(l.user_text, '') FROM 1 FOR $2), ''),
 			char_length(COALESCE(l.user_text, '')),
 			COALESCE(substring(COALESCE(l.assistant_text, '') FROM 1 FOR $2), ''),
@@ -464,6 +470,7 @@ func (s *Store) GetLogCore(ctx context.Context, id int64) (LogCore, error) {
 		&tokenAlias,
 		&model,
 		&stream,
+		&record.Protocol,
 		&userText,
 		&userTextChars,
 		&assistantText,
@@ -495,6 +502,7 @@ func (s *Store) GetLogCore(ctx context.Context, id int64) (LogCore, error) {
 	record.TokenPreview = nullStringValue(tokenPreview)
 	record.TokenAlias = nullStringValue(tokenAlias)
 	record.Model = nullStringValue(model)
+	record.Protocol = nullStringValue(protocol)
 	record.UserText = nullStringValue(userText)
 	record.AssistantText = nullStringValue(assistantText)
 
@@ -598,6 +606,7 @@ func (s *Store) GetLog(ctx context.Context, id int64) (Record, error) {
 	var statusCode sql.NullInt64
 	var finishedAt sql.NullTime
 	var stream sql.NullBool
+	var protocol sql.NullString
 
 	err := s.pool.QueryRow(ctx, `
 		SELECT
@@ -611,6 +620,7 @@ func (s *Store) GetLog(ctx context.Context, id int64) (Record, error) {
 			l.remote_addr,
 			l.request_host,
 			l.upstream_base,
+			COALESCE(l.protocol, '') AS protocol,
 			l.status_code,
 			l.error_text,
 			l.is_capture_path,
@@ -651,6 +661,7 @@ func (s *Store) GetLog(ctx context.Context, id int64) (Record, error) {
 		&record.RemoteAddr,
 		&record.RequestHost,
 		&record.UpstreamBase,
+		&protocol,
 		&statusCode,
 		&errorText,
 		&record.IsCapturePath,
@@ -701,6 +712,7 @@ func (s *Store) GetLog(ctx context.Context, id int64) (Record, error) {
 	record.TokenPreview = nullStringValue(tokenPreview)
 	record.TokenAlias = nullStringValue(tokenAlias)
 	record.Model = nullStringValue(model)
+	record.Protocol = nullStringValue(protocol)
 	record.RequestContentType = nullStringValue(requestContentType)
 	record.ResponseContentType = nullStringValue(responseContentType)
 	record.UserText = nullStringValue(userText)

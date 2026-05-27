@@ -254,6 +254,18 @@ func (a *SSEAccumulator) consumeLine(line string) {
 			a.usageJSON = usage
 		}
 	}
+
+	// Claude streaming: message_start event contains message.usage
+	if eventType, _ := decoded["type"].(string); eventType == "message_start" {
+		if message, ok := decoded["message"].(map[string]any); ok {
+			if a.model == "" {
+				a.model = extractModel(message)
+			}
+			if usage := marshalJSON(message["usage"]); len(usage) > 0 {
+				a.usageJSON = usage
+			}
+		}
+	}
 }
 
 func compactStrings(values []string) []string {
@@ -317,6 +329,18 @@ func collectResponseTexts(payload map[string]any) []string {
 			texts = append(texts, extractTextParts(outputItem["content"])...)
 		}
 	}
+	// Claude format: top-level content array
+	if content, ok := payload["content"].([]any); ok {
+		for _, item := range content {
+			contentBlock, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if text, ok := contentBlock["text"].(string); ok && text != "" {
+				texts = append(texts, text)
+			}
+		}
+	}
 	return texts
 }
 
@@ -341,6 +365,15 @@ func collectSSETexts(payload map[string]any) []string {
 	if eventType, _ := payload["type"].(string); strings.HasSuffix(eventType, ".delta") {
 		if delta, ok := payload["delta"].(string); ok {
 			texts = append(texts, delta)
+		}
+	}
+
+	// Claude streaming: content_block_delta event
+	if eventType, _ := payload["type"].(string); eventType == "content_block_delta" {
+		if delta, ok := payload["delta"].(map[string]any); ok {
+			if text, ok := delta["text"].(string); ok && text != "" {
+				texts = append(texts, text)
+			}
 		}
 	}
 

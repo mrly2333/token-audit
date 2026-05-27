@@ -13,6 +13,7 @@ type Record struct {
 	RemoteAddr          string
 	RequestHost         string
 	UpstreamBase        string
+	Protocol            string
 	StatusCode          int
 	ErrorText           string
 	IsCapturePath       bool
@@ -113,6 +114,7 @@ type LogListItem struct {
 	Method           string
 	Path             string
 	StatusCode       int
+	Protocol         string
 	Model            string
 	TokenFingerprint string
 	TokenPreview     string
